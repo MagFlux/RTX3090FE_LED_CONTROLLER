@@ -44,7 +44,7 @@ void dumpDLLExports(LIBRARY_HANDLE handle, const QString& dllPath)
     qDebug() << "Number of exported functions:" << exportDir->NumberOfNames;
 
     // Only dump first 20 functions to avoid overwhelming output
-    int maxFunctions = qMin((int)exportDir->NumberOfNames, 20);
+    const DWORD maxFunctions = qMin(exportDir->NumberOfNames, static_cast<DWORD>(20));
     for (DWORD i = 0; i < maxFunctions; i++) {
         char* functionName = (char*)((BYTE*)handle + addressOfNames[i]);
         qDebug() << "Exported function" << i << ":" << functionName;
