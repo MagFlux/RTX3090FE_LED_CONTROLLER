@@ -346,23 +346,30 @@ bool NVIDIAController::detectRTX3090FE()
 
 void NVIDIAController::getZoneInfo()
 {
-    if (!initialized || !deviceFound)
+    if (!deviceFound)
         return;
 
-    if (NvAPI_GPU_ClientIllumZonesGetControl)
-    {
-        // Initialize the zone parameters structure
-        memset(&zoneParams, 0, sizeof(zoneParams));
-        zoneParams.version = 72012; // Based on OpenRGB code
-        zoneParams.bDefault = 0;
+    if (!NvAPI_GPU_ClientIllumZonesGetControl)
+        return;
 
-        // Get zone information
-        NV_STATUS status = NvAPI_GPU_ClientIllumZonesGetControl(gpuHandle, &zoneParams);
-        if (status == NVAPI_OK)
-        {
-            numZones = zoneParams.numIllumZonesControl;
-            qDebug() << "Found" << numZones << "illumination zones";
-        }
+    memset(&zoneParams, 0, sizeof(zoneParams));
+    zoneParams.version = NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS_VER;
+    zoneParams.bDefault = 0;
+
+    NV_STATUS status = NvAPI_GPU_ClientIllumZonesGetControl(gpuHandle, &zoneParams);
+    if (status != NVAPI_OK)
+    {
+        qDebug() << "NvAPI_GPU_ClientIllumZonesGetControl failed:" << status;
+        return;
+    }
+
+    numZones = zoneParams.numIllumZonesControl;
+    qDebug() << "Found" << numZones << "illumination zones";
+    for (int i = 0; i < numZones && i < NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX; ++i)
+    {
+        qDebug() << "  zone" << i
+                 << "type=" << static_cast<int>(zoneParams.zones[i].type)
+                 << "ctrlMode=" << static_cast<int>(zoneParams.zones[i].ctrlMode);
     }
 }
 
@@ -386,18 +393,12 @@ void NVIDIAController::setWhiteBrightness(int brightness)
     currentWhiteBrightness = brightness;
 }
 
-bool NVIDIAController::isRGBWZone(int zoneIndex) const
+NV_GPU_CLIENT_ILLUM_ZONE_TYPE NVIDIAController::getZoneType(int zoneIndex) const
 {
-    // For RTX 3090 FE, we know it specifically uses RGBW zones
-    // This function returns true for all zones since RTX 3090 FE has RGBW capability
+    if (!deviceFound || zoneIndex < 0 || zoneIndex >= NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX)
+        return NV_GPU_CLIENT_ILLUM_ZONE_TYPE_INVALID;
 
-    // Check if we have valid zone information
-    if (!initialized || !deviceFound || zoneIndex < 0)
-        return false;
-
-    // Since we're targeting RTX 3090 FE which is known to support RGBW zones,
-    // and we know the device has been properly detected, return true
-    return true;
+    return zoneParams.zones[zoneIndex].type;
 }
 
 void NVIDIAController::updateLEDs()
@@ -405,53 +406,118 @@ void NVIDIAController::updateLEDs()
     if (!initialized || !deviceFound)
         return;
 
-    // This is a simplified implementation
-    // In a real implementation, you would:
-    // 1. Get current zone control settings using NvAPI_GPU_ClientIllumZonesGetControl
-    // 2. Set the zone parameters with the new color and brightness
-    // 3. Apply the changes using NvAPI_GPU_ClientIllumZonesSetControl
-
-    if (NvAPI_GPU_ClientIllumZonesGetControl && NvAPI_GPU_ClientIllumZonesSetControl)
+    if (!NvAPI_GPU_ClientIllumZonesGetControl || !NvAPI_GPU_ClientIllumZonesSetControl)
     {
-        // Initialize the zone parameters structure
-        memset(&zoneParams, 0, sizeof(zoneParams));
-        zoneParams.version = 72012; // Based on OpenRGB code
-        zoneParams.bDefault = 0;
-        zoneParams.numIllumZonesControl = 1; // Assuming 1 zone for RTX 3090 FE
+        qDebug() << "updateLEDs: illumination zone control functions not available";
+        return;
+    }
 
-        // Get current control settings
-        NV_STATUS getStatus = NvAPI_GPU_ClientIllumZonesGetControl(gpuHandle, &zoneParams);
-        if (getStatus == NVAPI_OK)
+    // Query the live control state so we preserve any fields the driver requires
+    // and learn the type / ctrlMode of each zone.
+    NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS params;
+    memset(&params, 0, sizeof(params));
+    params.version = NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS_VER;
+    params.bDefault = 0;
+
+    NV_STATUS getStatus = NvAPI_GPU_ClientIllumZonesGetControl(gpuHandle, &params);
+    unsigned numZones = params.numIllumZonesControl;
+    if (getStatus != NVAPI_OK)
+    {
+        // Fall back to a single manual RGB/RGBW zone if we can't read current state.
+        qDebug() << "updateLEDs: GetControl failed:" << getStatus;
+        memset(&params, 0, sizeof(params));
+        params.version = NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS_VER;
+        params.bDefault = 0;
+        params.numIllumZonesControl = 1;
+        params.zones[0].type     = NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW;
+        params.zones[0].ctrlMode = NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL_RGB;
+        numZones = 1;
+    }
+
+    for (unsigned i = 0; i < numZones && i < NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX; ++i)
+    {
+        // Pick the largest colour-capable variant the zone reports so we can
+        // write R/G/B (and W when available).
+        NV_GPU_CLIENT_ILLUM_ZONE* z = &params.zones[i];
+        z->ctrlMode = NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL_RGB;
+
+        // The "White Brightness" value is the master percentage (brightnessPct)
+        // for every zone. The picked colour drives R/G/B, and for RGBW zones the
+        // white *content* of that colour (its minimum channel) is routed to the
+        // dedicated white diode (colorW) so white renders at full quality.
+        // `on` is 0 when the mode is Off, so the whole zone is dark.
+        const unsigned int r  = static_cast<unsigned int>(currentRGBColor.red());
+        const unsigned int g  = static_cast<unsigned int>(currentRGBColor.green());
+        const unsigned int b  = static_cast<unsigned int>(currentRGBColor.blue());
+        const unsigned int on = (currentMode == NVIDIA_ILLUMINATION_OFF)
+                                    ? 0u : static_cast<unsigned int>(currentBrightness);
+
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW)
         {
-            // Set the zone parameters for the LED
-            if (currentMode == 0) // Off
+            // data.rgbw.data.manualRGBW.rgbwParams.{colorR..}
+            NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_DATA_MANUAL_RGBW_PARAMS* p =
+                &z->data.rgbw.data.manualRGBW.rgbwParams;
+            if (currentMode == NVIDIA_ILLUMINATION_OFF)
             {
-                zoneParams.zones[0].ctrlMode = NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL_RGB;
-                zoneParams.zones[0].type = NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW;
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorR = 0;
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorG = 0;
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorB = 0;
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorW = 0;
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.brightnessPct = 0;
+                p->colorR = 0; p->colorG = 0; p->colorB = 0; p->colorW = 0;
+                p->brightnessPct = 0;
             }
-            else // Direct mode
+            else
             {
-                zoneParams.zones[0].ctrlMode = NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL_RGB;
-                zoneParams.zones[0].type = NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW;
-
-                // Set RGB color
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorR = currentRGBColor.red();
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorG = currentRGBColor.green();
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.colorB = currentRGBColor.blue();
-
-                // Set brightness (this will be used for both RGB and white channels)
-                zoneParams.zones[0].data.rgbw.data.rgbwParams.brightnessPct = currentBrightness;
+                unsigned int w = r;   // white content = min(R,G,B) -> dedicated W diode
+                if (g < w) w = g;
+                if (b < w) w = b;
+                p->colorR = static_cast<unsigned char>(r - w);
+                p->colorG = static_cast<unsigned char>(g - w);
+                p->colorB = static_cast<unsigned char>(b - w);
+                p->colorW = static_cast<unsigned char>(w);
+                p->brightnessPct = static_cast<unsigned char>(on);
             }
-
-            // Apply the changes
-            NvAPI_GPU_ClientIllumZonesSetControl(gpuHandle, &zoneParams);
-            // Note: We could check status here for error handling if needed
         }
+        else if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGB)
+        {
+            // data.rgb.data.manualRGB.rgbParams.{colorR..}
+            NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_DATA_MANUAL_RGB_PARAMS* p =
+                &z->data.rgb.data.manualRGB.rgbParams;
+            if (currentMode == NVIDIA_ILLUMINATION_OFF)
+            {
+                p->colorR = 0; p->colorG = 0; p->colorB = 0;
+                p->brightnessPct = 0;
+            }
+            else
+            {
+                p->colorR = static_cast<unsigned char>(r);
+                p->colorG = static_cast<unsigned char>(g);
+                p->colorB = static_cast<unsigned char>(b);
+                p->brightnessPct = static_cast<unsigned char>(on);
+            }
+        }
+        else
+        {
+            // SINGLE_COLOR / COLOR_FIXED: only brightness is meaningful.
+            if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_SINGLE_COLOR)
+            {
+                z->data.singleColor.data.manualSingleColor.singleColorParams.brightnessPct =
+                    (currentMode == NVIDIA_ILLUMINATION_OFF) ? 0u : static_cast<unsigned char>(currentBrightness);
+            }
+            else
+            {
+                z->data.colorFixed.data.manualColorFixed.colorFixedParams.brightnessPct =
+                    (currentMode == NVIDIA_ILLUMINATION_OFF) ? 0u : static_cast<unsigned char>(currentBrightness);
+            }
+        }
+    }
+
+    params.numIllumZonesControl = numZones;
+
+    NV_STATUS setStatus = NvAPI_GPU_ClientIllumZonesSetControl(gpuHandle, &params);
+    if (setStatus != NVAPI_OK)
+    {
+        qWarning() << "updateLEDs: NvAPI_GPU_ClientIllumZonesSetControl failed:" << setStatus;
+    }
+    else
+    {
+        qDebug() << "updateLEDs: applied" << numZones << "zone(s) in mode" << currentMode;
     }
 }
 
