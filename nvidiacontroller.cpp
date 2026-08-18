@@ -294,37 +294,49 @@ bool NVIDIAController::detectRTX3090FE()
         return false;
     }
 
-    // Look for RTX 3090 FE specifically
-    // RTX 3090 FE typically has device ID 0x2230 and subdevice ID 0x1457 (based on NVIDIA documentation)
-    const NV_U32 RTX3090_DEV_ID = 0x2230;     // RTX 3090 device ID
-    const NV_U32 RTX3090_FE_SUB_DEV_ID = 0x1457; // RTX 3090 FE subdevice ID
+    // Look for RTX 3090 FE specifically by PCI identifiers.
+    // NVAPI returns deviceId/subSystemId as packed 32-bit values where the
+    // high 16 bits are the PCI ID and the low 16 bits are the vendor ID
+    // (e.g. 0x220410de -> RTX 3090 device ID 0x2204, 0x147d10de -> FE
+    // subsystem ID 0x147d).
+    const NV_U32 NVIDIA_VENDOR_ID = 0x10DE;    // NVIDIA vendor ID
+    const NV_U32 RTX3090_DEV_ID = 0x2204;      // RTX 3090 PCI device ID
+    const NV_U32 RTX3090_FE_SUB_DEV_ID = 0x147d; // RTX 3090 FE PCI subsystem ID
 
     for (int i = 0; i < gpuCount; i++)
     {
         NV_U32 deviceId = 0;
         NV_U32 subSystemId = 0;
         NV_U32 revisionId = 0;
-        NV_U32 vendorId = 0;
+        NV_U32 extDeviceId = 0;
 
-        if (NvAPI_GPU_GetPCIIdentifiers(gpuHandles[i], &deviceId, &subSystemId, &revisionId, &vendorId) != NVAPI_OK)
+        // 4th out-parameter is the *external* PCI device ID, not a vendor ID
+        if (NvAPI_GPU_GetPCIIdentifiers(gpuHandles[i], &deviceId, &subSystemId, &revisionId, &extDeviceId) != NVAPI_OK)
         {
             continue;
         }
 
-        // Check if this is an NVIDIA GPU (vendor ID should be 0x10DE)
-        if (vendorId == 0x10DE)  // NVIDIA vendor ID
-        {
-            qDebug() << "Found NVIDIA GPU:" << QString::number(deviceId, 16)
-                     << "SubSystem:" << QString::number(subSystemId, 16);
+        // NVAPI returns these as 32-bit values with the 16-bit PCI ID in the
+        // high word and the vendor ID (0x10DE) in the low word, e.g.:
+        //   deviceId    = 0x220410de  -> PCI device ID 0x2204
+        //   subSystemId = 0x147d10de  -> PCI subsystem ID 0x147d
+        const NV_U32 vendorId = deviceId & 0xFFFF;
+        if (vendorId != NVIDIA_VENDOR_ID)
+            continue;
 
-            // Check for RTX 3090 FE specifically (device ID + subdevice ID)
-            if (deviceId == RTX3090_DEV_ID && subSystemId == RTX3090_FE_SUB_DEV_ID)
-            {
-                gpuHandle = gpuHandles[i];
-                deviceFound = true;
-                qDebug() << "RTX 3090 FE detected successfully";
-                return true;
-            }
+        const NV_U32 devId16 = (deviceId >> 16) & 0xFFFF;
+        const NV_U32 subId16 = (subSystemId >> 16) & 0xFFFF;
+
+        qDebug() << "Found NVIDIA GPU: dev=0x" << QString::number(devId16, 16)
+                 << "sub=0x" << QString::number(subId16, 16);
+
+        // Check for RTX 3090 FE specifically (device ID + FE subsystem ID)
+        if (devId16 == RTX3090_DEV_ID && subId16 == RTX3090_FE_SUB_DEV_ID)
+        {
+            gpuHandle = gpuHandles[i];
+            deviceFound = true;
+            qDebug() << "RTX 3090 FE detected successfully";
+            return true;
         }
     }
 

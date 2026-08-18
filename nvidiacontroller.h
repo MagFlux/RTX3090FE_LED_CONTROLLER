@@ -151,6 +151,8 @@ private:
     // Function pointer types for the actual functions we'll get through query interface
     typedef NV_STATUS (*NvAPI_Initialize_t)();
     typedef NV_STATUS (*NvAPI_EnumPhysicalGPUs_t)(NV_PHYSICAL_GPU_HANDLE*, NV_S32*);
+    // NVAPI_GPU_GetPCIIdentifiers(out deviceId, out subSystemId, out revisionId, out extDeviceId)
+    // NOTE: The 4th parameter is the *external* PCI device ID, NOT the vendor ID.
     typedef NV_STATUS (*NvAPI_GPU_GetPCIIdentifiers_t)(NV_PHYSICAL_GPU_HANDLE, NV_U32*, NV_U32*, NV_U32*, NV_U32*);
     typedef NV_STATUS (*NvAPI_GPU_ClientIllumZonesGetControl_t)(NV_PHYSICAL_GPU_HANDLE, NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS*);
     typedef NV_STATUS (*NvAPI_GPU_ClientIllumZonesSetControl_t)(NV_PHYSICAL_GPU_HANDLE, NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_PARAMS*);
