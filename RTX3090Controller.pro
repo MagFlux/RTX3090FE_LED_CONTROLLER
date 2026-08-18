@@ -22,12 +22,12 @@ win32 {
     QMAKE_CXXFLAGS += -Wno-cast-function-type
 }
 
-# Libraries - handle platform-specific linking
+# NVAPI is always loaded dynamically at runtime (LoadLibrary / dlopen) and resolved
+# through nvapi_QueryInterface, so there is nothing to link against. The old
+# `-lnvidia-ml` link pointed at the wrong library (the Management API), which does
+# not provide the illumination interfaces we use.
 win32 {
-    # On Windows, we don't link directly to nvapi library since we load it dynamically
-    # We only need the include path for NVAPI headers
-    # The actual loading is done in code using LoadLibrary
+    # Loaded dynamically via LoadLibrary + GetProcAddress at runtime.
 } else:unix {
-    # On Unix-like systems (Linux), link against nvidia-ml
-    LIBS += -lnvidia-ml
+    # Loaded dynamically via dlopen + dlsym at runtime.
 }

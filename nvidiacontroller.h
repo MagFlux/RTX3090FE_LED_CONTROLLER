@@ -142,7 +142,10 @@ private:
     int numZones;
 
     // NVAPI function pointers (using query interface pattern)
-    typedef NV_STATUS (*NvAPI_QueryInterface_t)(unsigned int offset);
+    // nvapi_QueryInterface returns a function pointer, so the return type MUST be
+    // a pointer type, not a 32-bit handle. Modeling it as NV_STATUS (unsigned int)
+    // truncates the returned pointer on 64-bit and yields garbage function pointers.
+    typedef void *(*NvAPI_QueryInterface_t)(unsigned int offset);
     NvAPI_QueryInterface_t NvAPI_QueryInterface;
 
     // Function pointer types for the actual functions we'll get through query interface

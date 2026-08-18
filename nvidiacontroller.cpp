@@ -123,14 +123,18 @@ bool NVIDIAController::initialize()
         return false;
     }
 
-    qDebug() << "Query interface functions set up successfully. Attempting to detect RTX 3090 FE...";
+    qDebug() << "Query interface functions set up successfully. Initializing NVAPI...";
 
-    NV_STATUS status = NVAPI_OK;
-    status = NvAPI_Initialize();
-    if (status != NVAPI_OK)
+    // NVAPI must be fully initialized before any other call (e.g. enumerating
+    // GPUs) or those calls fail. Initialize first, then detect the GPU.
+    NV_STATUS initStatus = NvAPI_Initialize();
+    if (initStatus != NVAPI_OK)
     {
-        qDebug() << "Failed to initialized...";
+        qDebug() << "Failed to initialize NVAPI - status code:" << initStatus;
+        return false;
     }
+
+    qDebug() << "NVAPI initialized successfully. Attempting to detect RTX 3090 FE...";
 
     // Try to detect RTX 3090 FE
     if (!detectRTX3090FE())
@@ -139,23 +143,9 @@ bool NVIDIAController::initialize()
         return false;
     }
 
-    qDebug() << "RTX 3090 FE detected. Attempting to initialize NVAPI...";
+    qDebug() << "RTX 3090 FE detected.";
 
-    // Initialize NVAPI using the query interface
-    if (!NvAPI_Initialize)
-    {
-        qDebug() << "Failed to get NvAPI_Initialize function pointer through query interface";
-        return false;
-    }
-
-    NV_STATUS initStatus = NvAPI_Initialize();
-    if (initStatus != NVAPI_OK)
-    {
-        qDebug() << "Failed to initialize NVAPI - status code:" << initStatus;
-        return false;
-    }
-
-    qDebug() << "NVAPI initialized successfully. Getting zone information...";
+    qDebug() << "Getting zone information...";
 
     // Get zone information
     getZoneInfo();
@@ -236,14 +226,15 @@ bool NVIDIAController::loadNVAPILibrary()
         }
     }
 #elif defined(Q_OS_LINUX)
-    // Linux: Try to load libnvidia-ml.so or similar
-    const QString libName = "libnvidia-ml.so";
+    // Linux: NVAPI's query interface lives in libnvidia-api.so (not libnvidia-ml.so,
+    // which is the separate Management API and does not export nvapi_QueryInterface).
+    const QString libName = "libnvidia-api.so.1";
     LIBRARY_HANDLE handle = LOAD_LIBRARY(libName.toLocal8Bit().constData(), RTLD_LAZY);
 
-    // If that fails, try alternative names
+    // If that fails, try the unversioned name
     if (!handle)
     {
-        const QString altLibName = "libnvidia-ml.so.1";
+        const QString altLibName = "libnvidia-api.so";
         handle = LOAD_LIBRARY(altLibName.toLocal8Bit().constData(), RTLD_LAZY);
     }
 #endif
@@ -317,9 +308,11 @@ bool NVIDIAController::detectRTX3090FE()
     NV_PHYSICAL_GPU_HANDLE gpuHandles[16] = {0};  // Maximum number of GPUs we might encounter
     NV_S32 gpuCount = 0;
 
-    if (!NvAPI_EnumPhysicalGPUs(gpuHandles, &gpuCount))
+    // NVAPI returns NVAPI_OK (0) on success and a nonzero value on error.
+    NV_STATUS enumStatus = NvAPI_EnumPhysicalGPUs(gpuHandles, &gpuCount);
+    if (enumStatus != NVAPI_OK)
     {
-        qDebug() << "Failed to enumerate GPUs";
+        qDebug() << "Failed to enumerate GPUs - status code:" << enumStatus;
         return false;
     }
 
@@ -341,22 +334,24 @@ bool NVIDIAController::detectRTX3090FE()
         NV_U32 revisionId = 0;
         NV_U32 vendorId = 0;
 
-        if (NvAPI_GPU_GetPCIIdentifiers(gpuHandles[i], &deviceId, &subSystemId, &revisionId, &vendorId))
+        if (NvAPI_GPU_GetPCIIdentifiers(gpuHandles[i], &deviceId, &subSystemId, &revisionId, &vendorId) != NVAPI_OK)
         {
-            // Check if this is an NVIDIA GPU (vendor ID should be 0x10DE)
-            if (vendorId == 0x10DE)  // NVIDIA vendor ID
-            {
-                qDebug() << "Found NVIDIA GPU:" << QString::number(deviceId, 16)
-                         << "SubSystem:" << QString::number(subSystemId, 16);
+            continue;
+        }
 
-                // Check for RTX 3090 FE specifically (device ID + subdevice ID)
-                if (deviceId == RTX3090_DEV_ID && subSystemId == RTX3090_FE_SUB_DEV_ID)
-                {
-                    gpuHandle = gpuHandles[i];
-                    deviceFound = true;
-                    qDebug() << "RTX 3090 FE detected successfully";
-                    return true;
-                }
+        // Check if this is an NVIDIA GPU (vendor ID should be 0x10DE)
+        if (vendorId == 0x10DE)  // NVIDIA vendor ID
+        {
+            qDebug() << "Found NVIDIA GPU:" << QString::number(deviceId, 16)
+                     << "SubSystem:" << QString::number(subSystemId, 16);
+
+            // Check for RTX 3090 FE specifically (device ID + subdevice ID)
+            if (deviceId == RTX3090_DEV_ID && subSystemId == RTX3090_FE_SUB_DEV_ID)
+            {
+                gpuHandle = gpuHandles[i];
+                deviceFound = true;
+                qDebug() << "RTX 3090 FE detected successfully";
+                return true;
             }
         }
     }
