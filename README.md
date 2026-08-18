@@ -10,16 +10,6 @@ This is a simplified standalone Qt application that controls only the NVIDIA RTX
 
 ## Build Instructions
 
-### Linux:
-1. Install dependencies:
-   - `sudo apt install qt5-default libnvapi-dev`
-
-2. Build:
-   ```bash
-   qmake RTX3090Controller.pro
-   make
-   ```
-
 ### Windows:
 1. Install Qt with Visual Studio support
 2. Install NVIDIA NVAPI SDK

@@ -7,26 +7,13 @@
 #include <QTimer>
 #include <cstring>
 
-#ifdef Q_OS_WIN
 #include <windows.h>
-#endif
+#define LIBRARY_HANDLE HMODULE
+#define LOAD_LIBRARY LoadLibraryW
+#define GET_PROC_ADDRESS GetProcAddress
+#define CLOSE_LIBRARY FreeLibrary
 
-#ifdef Q_OS_WIN
-    #include <windows.h>
-    #define LIBRARY_HANDLE HMODULE
-    #define LOAD_LIBRARY LoadLibraryW
-    #define GET_PROC_ADDRESS GetProcAddress
-    #define CLOSE_LIBRARY FreeLibrary
-#elif defined(Q_OS_LINUX)
-    #include <dlfcn.h>
-    #define LIBRARY_HANDLE void*
-    #define LOAD_LIBRARY dlopen
-    #define GET_PROC_ADDRESS dlsym
-    #define CLOSE_LIBRARY dlclose
-#endif
-
-// Helper function to dump exported functions from a DLL (Windows only)
-#ifdef Q_OS_WIN
+// Helper function to dump exported functions from a DLL
 void dumpDLLExports(LIBRARY_HANDLE handle, const QString& dllPath)
 {
     qDebug() << "=== DUMPING EXPORTS FROM DLL ===";
@@ -69,7 +56,6 @@ void dumpDLLExports(LIBRARY_HANDLE handle, const QString& dllPath)
 
     qDebug() << "=== END DUMP ===";
 }
-#endif
 
 NVIDIAController::NVIDIAController()
     : initialized(false)
@@ -157,8 +143,7 @@ bool NVIDIAController::initialize()
 
 bool NVIDIAController::loadNVAPILibrary()
 {
-#ifdef Q_OS_WIN
-    // Windows: Try to load nvapi64.dll first (64-bit version)
+    // Try to load nvapi64.dll first (64-bit version)
     const QString libName = "nvapi64.dll";
     qDebug() << "Attempting to load library:" << libName;
     LIBRARY_HANDLE handle = LOAD_LIBRARY(libName.toStdWString().c_str());
@@ -225,19 +210,6 @@ bool NVIDIAController::loadNVAPILibrary()
             qDebug() << "Could not get full path of loaded library";
         }
     }
-#elif defined(Q_OS_LINUX)
-    // Linux: NVAPI's query interface lives in libnvidia-api.so (not libnvidia-ml.so,
-    // which is the separate Management API and does not export nvapi_QueryInterface).
-    const QString libName = "libnvidia-api.so.1";
-    LIBRARY_HANDLE handle = LOAD_LIBRARY(libName.toLocal8Bit().constData(), RTLD_LAZY);
-
-    // If that fails, try the unversioned name
-    if (!handle)
-    {
-        const QString altLibName = "libnvidia-api.so";
-        handle = LOAD_LIBRARY(altLibName.toLocal8Bit().constData(), RTLD_LAZY);
-    }
-#endif
 
     if (!handle)
     {
