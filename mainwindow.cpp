@@ -188,6 +188,7 @@ void MainWindow::initializeController()
 
     currentRGBBrightness = gpuRgb;
     currentWhiteBrightness = gpuWhite;
+    linkCheckBox->setChecked(gpuRgb == gpuWhite);
     updateColorDisplay();
 }
 
