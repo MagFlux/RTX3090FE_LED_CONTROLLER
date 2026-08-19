@@ -18,8 +18,8 @@
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
-    , controller(nullptr)
     , mirroringSliders(false)
+    , controller(nullptr)
     , currentRGBColor(Qt::red)
     , currentRGBBrightness(100)
     , currentWhiteBrightness(100)
