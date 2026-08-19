@@ -441,16 +441,19 @@ void NVIDIAController::updateLEDs()
         NV_GPU_CLIENT_ILLUM_ZONE* z = &params.zones[i];
         z->ctrlMode = NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL_RGB;
 
-        // The "White Brightness" value is the master percentage (brightnessPct)
-        // for every zone. The picked colour drives R/G/B, and for RGBW zones the
-        // white *content* of that colour (its minimum channel) is routed to the
-        // dedicated white diode (colorW) so white renders at full quality.
-        // `on` is 0 when the mode is Off, so the whole zone is dark.
-        const unsigned int r  = static_cast<unsigned int>(currentRGBColor.red());
-        const unsigned int g  = static_cast<unsigned int>(currentRGBColor.green());
-        const unsigned int b  = static_cast<unsigned int>(currentRGBColor.blue());
-        const unsigned int on = (currentMode == NVIDIA_ILLUMINATION_OFF)
-                                    ? 0u : static_cast<unsigned int>(currentBrightness);
+        // The RGB slider drives the colour-capable zones (RGB / RGBW) and the
+        // White slider drives the fixed-white zones (SINGLE_COLOR / COLOR_FIXED).
+        // The picked colour drives R/G/B, and for RGBW zones the white *content*
+        // of that colour (its minimum channel) is routed to the dedicated white
+        // diode (colorW) so white renders at full quality. Both are forced to
+        // zero when the mode is Off, so the whole zone is dark.
+        const unsigned int r       = static_cast<unsigned int>(currentRGBColor.red());
+        const unsigned int g       = static_cast<unsigned int>(currentRGBColor.green());
+        const unsigned int b       = static_cast<unsigned int>(currentRGBColor.blue());
+        const unsigned int onRgb   = (currentMode == NVIDIA_ILLUMINATION_OFF)
+                                          ? 0u : static_cast<unsigned int>(currentBrightness);
+        const unsigned int onWhite = (currentMode == NVIDIA_ILLUMINATION_OFF)
+                                          ? 0u : static_cast<unsigned int>(currentWhiteBrightness);
 
         if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW)
         {
@@ -471,7 +474,7 @@ void NVIDIAController::updateLEDs()
                 p->colorG = static_cast<unsigned char>(g - w);
                 p->colorB = static_cast<unsigned char>(b - w);
                 p->colorW = static_cast<unsigned char>(w);
-                p->brightnessPct = static_cast<unsigned char>(on);
+                p->brightnessPct = static_cast<unsigned char>(onRgb);
             }
         }
         else if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGB)
@@ -489,7 +492,7 @@ void NVIDIAController::updateLEDs()
                 p->colorR = static_cast<unsigned char>(r);
                 p->colorG = static_cast<unsigned char>(g);
                 p->colorB = static_cast<unsigned char>(b);
-                p->brightnessPct = static_cast<unsigned char>(on);
+                p->brightnessPct = static_cast<unsigned char>(onRgb);
             }
         }
         else
@@ -498,12 +501,12 @@ void NVIDIAController::updateLEDs()
             if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_SINGLE_COLOR)
             {
                 z->data.singleColor.data.manualSingleColor.singleColorParams.brightnessPct =
-                    (currentMode == NVIDIA_ILLUMINATION_OFF) ? 0u : static_cast<unsigned char>(currentBrightness);
+                    static_cast<unsigned char>(onWhite);
             }
             else
             {
                 z->data.colorFixed.data.manualColorFixed.colorFixedParams.brightnessPct =
-                    (currentMode == NVIDIA_ILLUMINATION_OFF) ? 0u : static_cast<unsigned char>(currentBrightness);
+                    static_cast<unsigned char>(onWhite);
             }
         }
     }

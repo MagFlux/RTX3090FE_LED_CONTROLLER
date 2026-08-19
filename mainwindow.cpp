@@ -19,7 +19,9 @@
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , controller(nullptr)
+    , mirroringSliders(false)
     , currentRGBColor(Qt::red)
+    , currentRGBBrightness(100)
     , currentWhiteBrightness(100)
     , currentMode(1) // Direct mode
 {
@@ -65,12 +67,32 @@ void MainWindow::setupUI()
 
     rgbLayout->addWidget(rgbColorGroup);
 
-    // White Brightness Tab
+    // Brightness Tab (separate sliders for the RGB zone and the white zone)
     QWidget* whiteTab = new QWidget();
     QVBoxLayout* whiteLayout = new QVBoxLayout(whiteTab);
 
-    whiteBrightnessGroup = new QGroupBox("White Brightness");
+    whiteBrightnessGroup = new QGroupBox("Brightness");
     QVBoxLayout* brightnessLayout = new QVBoxLayout(whiteBrightnessGroup);
+
+    // RGB light zone slider
+    QLabel* rgbSliderTitle = new QLabel("RGB Light");
+    rgbSliderTitle->setAlignment(Qt::AlignCenter);
+
+    rgbBrightnessSlider = new QSlider(Qt::Horizontal);
+    rgbBrightnessSlider->setMinimum(0);
+    rgbBrightnessSlider->setMaximum(100);
+    rgbBrightnessSlider->setValue(currentRGBBrightness);
+
+    rgbBrightnessLabel = new QLabel(QString::number(currentRGBBrightness) + "%");
+    rgbBrightnessLabel->setAlignment(Qt::AlignCenter);
+
+    brightnessLayout->addWidget(rgbSliderTitle);
+    brightnessLayout->addWidget(rgbBrightnessSlider);
+    brightnessLayout->addWidget(rgbBrightnessLabel);
+
+    // White light zone slider
+    QLabel* whiteSliderTitle = new QLabel("White Light");
+    whiteSliderTitle->setAlignment(Qt::AlignCenter);
 
     whiteBrightnessSlider = new QSlider(Qt::Horizontal);
     whiteBrightnessSlider->setMinimum(0);
@@ -80,8 +102,15 @@ void MainWindow::setupUI()
     whiteBrightnessLabel = new QLabel(QString::number(currentWhiteBrightness) + "%");
     whiteBrightnessLabel->setAlignment(Qt::AlignCenter);
 
+    brightnessLayout->addWidget(whiteSliderTitle);
     brightnessLayout->addWidget(whiteBrightnessSlider);
     brightnessLayout->addWidget(whiteBrightnessLabel);
+
+    // Link control: mirrors both sliders to the same value
+    linkCheckBox = new QCheckBox("Link sliders");
+    linkCheckBox->setChecked(true);
+
+    brightnessLayout->addWidget(linkCheckBox);
 
     whiteLayout->addWidget(whiteBrightnessGroup);
 
@@ -98,7 +127,7 @@ void MainWindow::setupUI()
 
     // Add tabs
     tabWidget->addTab(rgbTab, "RGB Color");
-    tabWidget->addTab(whiteTab, "White Brightness");
+    tabWidget->addTab(whiteTab, "Brightness");
 
     // Buttons
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -122,7 +151,9 @@ void MainWindow::setupUI()
 void MainWindow::setupConnections()
 {
     connect(rgbColorButton, &QPushButton::clicked, this, &MainWindow::onRGBColorButtonClicked);
+    connect(rgbBrightnessSlider, &QSlider::valueChanged, this, &MainWindow::onRBGBrightnessChanged);
     connect(whiteBrightnessSlider, &QSlider::valueChanged, this, &MainWindow::onWhiteBrightnessChanged);
+    connect(linkCheckBox, &QCheckBox::toggled, this, &MainWindow::onLinkToggled);
     connect(modeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onModeChanged);
     connect(applyButton, &QPushButton::clicked, this, &MainWindow::onApplyClicked);
@@ -156,10 +187,36 @@ void MainWindow::onRGBColorButtonClicked()
     }
 }
 
+void MainWindow::onRBGBrightnessChanged(int value)
+{
+    currentRGBBrightness = value;
+    rgbBrightnessLabel->setText(QString::number(value) + "%");
+
+    if (linkCheckBox->isChecked() && !mirroringSliders)
+    {
+        mirroringSliders = true;
+        whiteBrightnessSlider->setValue(value);
+        mirroringSliders = false;
+    }
+}
+
 void MainWindow::onWhiteBrightnessChanged(int value)
 {
     currentWhiteBrightness = value;
     whiteBrightnessLabel->setText(QString::number(value) + "%");
+
+    if (linkCheckBox->isChecked() && !mirroringSliders)
+    {
+        mirroringSliders = true;
+        rgbBrightnessSlider->setValue(value);
+        mirroringSliders = false;
+    }
+}
+
+void MainWindow::onLinkToggled(bool)
+{
+    // No action needed; the checkbox is read by the two slider handlers to
+    // decide whether to mirror the opposite slider.
 }
 
 void MainWindow::onModeChanged(int index)
@@ -172,7 +229,8 @@ void MainWindow::onApplyClicked()
     if (controller && controller->isInitialized())
     {
         controller->setMode(currentMode);
-        controller->setBrightness(currentWhiteBrightness);
+        controller->setBrightness(currentRGBBrightness);
+        controller->setWhiteBrightness(currentWhiteBrightness);
         controller->setRGBColor(currentRGBColor);
         controller->updateLEDs();
     }
@@ -180,8 +238,11 @@ void MainWindow::onApplyClicked()
 
 void MainWindow::onCancelClicked()
 {
-    // Reset to current values
+    // Reset both sliders to their stored values
+    mirroringSliders = true;
+    rgbBrightnessSlider->setValue(currentRGBBrightness);
     whiteBrightnessSlider->setValue(currentWhiteBrightness);
+    mirroringSliders = false;
     updateColorDisplay();
 }
 

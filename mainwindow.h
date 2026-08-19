@@ -13,6 +13,7 @@
 #include <QTimer>
 #include <QTabWidget>
 #include <QComboBox>
+#include <QCheckBox>
 #include "nvidiacontroller.h"
 
 class MainWindow : public QMainWindow
@@ -25,7 +26,9 @@ public:
 
 private slots:
     void onRGBColorButtonClicked();
+    void onRBGBrightnessChanged(int value);
     void onWhiteBrightnessChanged(int value);
+    void onLinkToggled(bool checked);
     void onModeChanged(int index);
     void updateColorDisplay();
     void onApplyClicked();
@@ -38,9 +41,12 @@ private:
 
     // UI Elements
     QPushButton* rgbColorButton;
+    QSlider* rgbBrightnessSlider;
     QSlider* whiteBrightnessSlider;
     QLabel* colorDisplay;
+    QLabel* rgbBrightnessLabel;
     QLabel* whiteBrightnessLabel;
+    QCheckBox* linkCheckBox;
     QComboBox* modeComboBox;
     QGroupBox* rgbColorGroup;
     QGroupBox* whiteBrightnessGroup;
@@ -48,11 +54,15 @@ private:
     QPushButton* cancelButton;
     QTabWidget* tabWidget;
 
+    // Guard to stop the link-checkbox mirroring from re-triggering itself
+    bool mirroringSliders;
+
     // Controller
     NVIDIAController* controller;
 
     // Current settings
     QColor currentRGBColor;
+    int currentRGBBrightness;
     int currentWhiteBrightness;
     int currentMode;
 };
