@@ -401,6 +401,63 @@ NV_GPU_CLIENT_ILLUM_ZONE_TYPE NVIDIAController::getZoneType(int zoneIndex) const
     return zoneParams.zones[zoneIndex].type;
 }
 
+QColor NVIDIAController::getCurrentRGBColor() const
+{
+    for (int i = 0; i < numZones && i < NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX; ++i)
+    {
+        const NV_GPU_CLIENT_ILLUM_ZONE* z = &zoneParams.zones[i];
+        if (z->ctrlMode != NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL)
+            continue;
+
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW)
+        {
+            const NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_DATA_MANUAL_RGBW_PARAMS* p =
+                &z->data.rgbw.data.manualRGBW.rgbwParams;
+            // Re-add the white content routed to the dedicated W diode.
+            return QColor(p->colorR + p->colorW, p->colorG + p->colorW, p->colorB + p->colorW, 255);
+        }
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGB)
+        {
+            const NV_GPU_CLIENT_ILLUM_ZONE_CONTROL_DATA_MANUAL_RGB_PARAMS* p =
+                &z->data.rgb.data.manualRGB.rgbParams;
+            return QColor(p->colorR, p->colorG, p->colorB, 255);
+        }
+    }
+    return QColor(Qt::white);
+}
+
+int NVIDIAController::getCurrentRGBBrightness() const
+{
+    for (int i = 0; i < numZones && i < NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX; ++i)
+    {
+        const NV_GPU_CLIENT_ILLUM_ZONE* z = &zoneParams.zones[i];
+        if (z->ctrlMode != NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL)
+            continue;
+
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGBW)
+            return z->data.rgbw.data.manualRGBW.rgbwParams.brightnessPct;
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_RGB)
+            return z->data.rgb.data.manualRGB.rgbParams.brightnessPct;
+    }
+    return 100;
+}
+
+int NVIDIAController::getCurrentWhiteBrightness() const
+{
+    for (int i = 0; i < numZones && i < NV_GPU_CLIENT_ILLUM_ZONE_NUM_ZONES_MAX; ++i)
+    {
+        const NV_GPU_CLIENT_ILLUM_ZONE* z = &zoneParams.zones[i];
+        if (z->ctrlMode != NV_GPU_CLIENT_ILLUM_CTRL_MODE_MANUAL)
+            continue;
+
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_SINGLE_COLOR)
+            return z->data.singleColor.data.manualSingleColor.singleColorParams.brightnessPct;
+        if (z->type == NV_GPU_CLIENT_ILLUM_ZONE_TYPE_COLOR_FIXED)
+            return z->data.colorFixed.data.manualColorFixed.colorFixedParams.brightnessPct;
+    }
+    return 100;
+}
+
 void NVIDIAController::updateLEDs()
 {
     if (!initialized || !deviceFound)

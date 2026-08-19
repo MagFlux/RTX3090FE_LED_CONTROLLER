@@ -272,6 +272,12 @@ public:
     int getNumZones() const { return numZones; }
     NV_GPU_CLIENT_ILLUM_ZONE_TYPE getZoneType(int zoneIndex) const;
 
+    // Read the currently active lighting state from the GPU (valid only when
+    // the zone is in MANUAL mode; falls back to white/100% otherwise).
+    QColor getCurrentRGBColor() const;
+    int getCurrentRGBBrightness() const;
+    int getCurrentWhiteBrightness() const;
+
 private:
     bool initialized;
     bool deviceFound;

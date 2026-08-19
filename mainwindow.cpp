@@ -173,7 +173,21 @@ void MainWindow::initializeController()
         return;
     }
 
-    // Set initial color
+    // Seed the GUI controls from the GPU's current lighting state so the
+    // sliders / colour preview match what the GPU is actually showing.
+    currentRGBColor = controller->getCurrentRGBColor();
+    const int gpuRgb = controller->getCurrentRGBBrightness();
+    const int gpuWhite = controller->getCurrentWhiteBrightness();
+
+    // Suppress link-mirroring while restoring so both zones keep their own
+    // (possibly different) GPU values.
+    mirroringSliders = true;
+    rgbBrightnessSlider->setValue(gpuRgb);
+    whiteBrightnessSlider->setValue(gpuWhite);
+    mirroringSliders = false;
+
+    currentRGBBrightness = gpuRgb;
+    currentWhiteBrightness = gpuWhite;
     updateColorDisplay();
 }
 
