@@ -8,6 +8,9 @@ SOURCES += \
     mainwindow.cpp \
     nvidiacontroller.cpp
 
+RESOURCES += \
+    resources.qrc
+
 HEADERS += \
     mainwindow.h \
     nvidiacontroller.h
@@ -18,14 +21,5 @@ INCLUDEPATH += \
     "C:/Windows/SysWOW64"
 
 # Suppress specific warnings for function pointer casting
-win32 {
-    QMAKE_CXXFLAGS += -Wno-cast-function-type
-}
-
-# NVAPI is always loaded dynamically at runtime (LoadLibrary) and resolved
-# through nvapi_QueryInterface, so there is nothing to link against. The old
-# `-lnvidia-ml` link pointed at the wrong library (the Management API), which does
-# not provide the illumination interfaces we use.
-win32 {
-    # Loaded dynamically via LoadLibrary + GetProcAddress at runtime.
-}
+QMAKE_CXXFLAGS += -Wno-cast-function-type
+RC_ICONS = resources/icon.ico
