@@ -15,10 +15,14 @@
 #include <QDir>
 #include <QDebug>
 #include <QTabWidget>
+#include <QSignalBlocker>
+#include <QIcon>
 
-MainWindow::MainWindow(QWidget *parent)
+MainWindow::MainWindow(bool startHidden, QWidget *parent)
     : QMainWindow(parent)
     , mirroringSliders(false)
+    , startedHidden(startHidden)
+    , trayIcon(nullptr)
     , controller(nullptr)
     , currentRGBColor(Qt::red)
     , currentRGBBrightness(100)
@@ -26,6 +30,7 @@ MainWindow::MainWindow(QWidget *parent)
     , currentMode(1) // Direct mode
 {
     setupUI();
+    setupTrayIcon();
     setupConnections();
     initializeController();
 }
@@ -125,9 +130,23 @@ void MainWindow::setupUI()
 
     modeLayout->addWidget(modeComboBox);
 
+    // Settings Tab (application-level options such as start-at-logon)
+    QWidget* settingsTab = new QWidget();
+    QVBoxLayout* settingsLayout = new QVBoxLayout(settingsTab);
+
+    QGroupBox* settingsGroup = new QGroupBox("Settings");
+    QVBoxLayout* settingsGroupLayout = new QVBoxLayout(settingsGroup);
+
+    startAtLoginCheckBox = new QCheckBox("Start at logon");
+    settingsGroupLayout->addWidget(startAtLoginCheckBox);
+
+    settingsLayout->addWidget(settingsGroup);
+    settingsLayout->addStretch();
+
     // Add tabs
     tabWidget->addTab(rgbTab, "RGB Color");
     tabWidget->addTab(whiteTab, "Brightness");
+    tabWidget->addTab(settingsTab, "Settings");
 
     // Buttons
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -158,6 +177,120 @@ void MainWindow::setupConnections()
             this, &MainWindow::onModeChanged);
     connect(applyButton, &QPushButton::clicked, this, &MainWindow::onApplyClicked);
     connect(cancelButton, &QPushButton::clicked, this, &MainWindow::onCancelClicked);
+    connect(startAtLoginCheckBox, &QCheckBox::toggled, this, &MainWindow::onToggleStartAtLogin);
+}
+
+void MainWindow::setupTrayIcon()
+{
+    // A real icon asset is bundled in resources/resources.qrc (as :/icon.ico).
+    // Use it for both the window and the system-tray icon so the user has a
+    // consistent, recognizable glyph everywhere (taskbar, Alt+Tab, tray).
+    const QIcon appIcon(QStringLiteral(":/icon.ico"));
+    setWindowIcon(appIcon);
+
+    trayMenu = new QMenu(this);
+    trayToggleStartupAction = trayMenu->addAction("Start at logon");
+    trayToggleStartupAction->setCheckable(true);
+    connect(trayToggleStartupAction, &QAction::toggled, this,
+            &MainWindow::onToggleStartAtLogin);
+    trayMenu->addAction(trayToggleStartupAction);
+    trayMenu->addSeparator();
+    trayMenu->addAction("Show", this, [this]() {
+        showNormal();
+        raise();
+        activateWindow();
+    });
+    trayMenu->addAction("Quit", qApp, &QApplication::quit);
+
+    trayIcon = new QSystemTrayIcon(appIcon, this);
+    trayIcon->setToolTip("RTX 3090 FE LED Controller");
+    trayIcon->setContextMenu(trayMenu);
+    connect(trayIcon, &QSystemTrayIcon::activated,
+            this, &MainWindow::onTrayIconActivated);
+    trayIcon->show();
+
+    // Reflect current startup-folder state in both check boxes.
+    const bool enabled = startAtLoginEnabled();
+    QSignalBlocker guard1(startAtLoginCheckBox);
+    QSignalBlocker guard2(trayToggleStartupAction);
+    startAtLoginCheckBox->setChecked(enabled);
+    trayToggleStartupAction->setChecked(enabled);
+}
+
+bool MainWindow::startAtLoginEnabled() const
+{
+    // The Run key is a fixed, well-known location; we open it in "raw" mode so
+    // QSettings maps this path verbatim to
+    // HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+    QSettings runKey(
+        QStringLiteral("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        QSettings::NativeFormat);
+    return !runKey.value(QStringLiteral("RTX3090Controller")).toString().isEmpty();
+}
+
+void MainWindow::setStartAtLoginEnabled(bool enabled)
+{
+    QSettings runKey(
+        QStringLiteral("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+        QSettings::NativeFormat);
+
+    if (enabled) {
+        // Quote the exe in case its path contains spaces, then pass the flag
+        // that makes the app start hidden in the tray on logon.
+        const QString cmd = QStringLiteral("\"%1\" --background")
+                                .arg(QCoreApplication::applicationFilePath());
+        runKey.setValue(QStringLiteral("RTX3090Controller"), cmd);
+    } else {
+        runKey.remove(QStringLiteral("RTX3090Controller"));
+    }
+    runKey.sync();
+}
+
+void MainWindow::onTrayIconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+    if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick) {
+        // Activating the tray icon always brings the window to the foreground.
+        showNormal();
+        raise();
+        activateWindow();
+    }
+}
+
+void MainWindow::onToggleStartAtLogin(bool checked)
+{
+    setStartAtLoginEnabled(checked);
+
+    // Keep the GUI checkbox and the tray menu action in sync. The signal
+    // source is whichever one the user toggled, so guard *only* the other one
+    // to avoid a re-entry loop.
+    if (this->sender() == startAtLoginCheckBox) {
+        QSignalBlocker guard(trayToggleStartupAction);
+        trayToggleStartupAction->setChecked(checked);
+    } else if (this->sender() == trayToggleStartupAction) {
+        QSignalBlocker guard(startAtLoginCheckBox);
+        startAtLoginCheckBox->setChecked(checked);
+    }
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    // Closing the window quits the whole application (per spec).
+    qApp->quit();
+    event->accept();
+}
+
+void MainWindow::changeEvent(QEvent *event)
+{
+    // Minimizing the window drops it out of the taskbar into the system tray
+    // instead of staying minimized on the taskbar; the tray icon (which is
+    // always present) becomes the way to bring the app back to the foreground.
+    if (event->type() == QEvent::WindowStateChange
+            && isMinimized()
+            && trayIcon != nullptr && trayIcon->isVisible()) {
+        hide();
+        event->ignore();
+    }
+    QMainWindow::changeEvent(event);
 }
 
 void MainWindow::initializeController()
