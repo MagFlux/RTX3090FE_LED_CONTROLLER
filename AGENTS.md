@@ -72,6 +72,19 @@ The Windows-only `.pro` settings are intentional — do not "generalize" them:
 
 Past-tense imperative first line, e.g. "Add brightness slider", "Fix zone detection". Keep messages concise.
 
+## License Compliance (mandatory for AI agents)
+
+Project license: `AGPL-3.0-or-later`. Full text in `LICENSE.md`. `NOTICE.md` lists all dependencies and why they are compliant.
+
+1. Always keep `LICENSE.md` compliant after any code or dependency change. Never change the project license without explicit user approval.
+2. Before adding, upgrading, or removing any dependency, library, header, snippet, asset, or tool-generated code: check its license, verify compatibility with `AGPL-3.0-or-later`, and update `NOTICE.md`.
+3. Always keep `README.md` accurate and up to date whenever code behavior, build steps, project layout, requirements, troubleshooting, or dependency usage changes.
+4. Only add dependencies compatible with `AGPL-3.0-or-later` (e.g. MIT, BSD, LGPLv3 dynamic-link, GPLv3, AGPLv3, public domain). Reject GPLv2-only, proprietary static-link, or unknown-license code.
+5. Preserve all attribution: never remove SPDX identifiers, copyright headers, or the MIT notice in `nvidiacontroller.h`. New files must carry the AGPL header plus `SPDX-License-Identifier: AGPL-3.0-or-later`.
+6. Keep NVAPI use compliant: header-derived structs stay MIT-attributed in-file; `nvapi64.dll` is runtime-only via `LoadLibraryW` and is never vendored, linked, or distributed.
+7. Prefer dynamic linking for LGPL components (Qt). Never static-link Qt or ship modified LGPL sources without updating `NOTICE.md` with source-offer details.
+8. If a change cannot be made compliant, stop and explain rather than committing a violation.
+
 ## License
 
-None specified. "Use at your own risk" per `README.md`.
+`AGPL-3.0-or-later` per `LICENSE.md`. "Use at your own risk" per `README.md`.
