@@ -1,3 +1,55 @@
+/*
+ * RTX3090Controller - NVIDIA GeForce RTX 3090 Founders Edition LED controller
+ * Copyright (C) 2026 Project Contributors
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <https://www.gnu.org/licenses/>.
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ *
+ * ---------------------------------------------------------------------------
+ * NVAPI notice:
+ * Portions of this file (the NVAPI base types and illumination types and
+ * structures below) are derived from NVIDIA NVAPI
+ * (https://github.com/NVIDIA/nvapi), which NVIDIA publishes under the MIT
+ * license. The MIT copyright and permission notices are reproduced below as
+ * required by the MIT license. Those portions remain under their MIT terms;
+ * the combined work as a whole is conveyed under AGPL-3.0-or-later.
+ *
+ * SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES.
+ * All rights reserved.
+ * SPDX-License-Identifier: MIT
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+ * DEALINGS IN THE SOFTWARE.
+ * ---------------------------------------------------------------------------
+ */
+
 #ifndef NVIDIACONTROLLER_H
 #define NVIDIACONTROLLER_H
 
@@ -6,7 +58,7 @@
 #include <vector>
 #include <stdint.h>
 
-// NVAPI base types (match the real nvapi64.dll ABI)
+// NVAPI base types (match the real nvapi64.dll ABI; derived from NVIDIA NVAPI, MIT, see above)
 typedef int32_t  NV_STATUS;
 typedef void*    NV_PHYSICAL_GPU_HANDLE;
 typedef uint32_t NV_U32;
@@ -15,10 +67,10 @@ typedef uint8_t  NV_U8;
 typedef uint16_t NV_U16;
 
 // ---------------------------------------------------------------------------
-// NVAPI illumination types and structures.
+// NVAPI illumination types and structures (derived from NVIDIA NVAPI, MIT;
+// see license notice at the top of this file).
 //
-// IMPORTANT: these definitions were copied verbatim from the real NVIDIA NVAPI
-// headers and must stay byte-for-byte identical to the ABI exposed by
+// IMPORTANT: these definitions must stay byte-for-byte identical to the ABI exposed by
 // nvapi64.dll. The driver reads/writes these structs through system memory, so
 // any difference in size or field offset causes a heap buffer overflow:
 // NvAPI_GPU_ClientIllumZonesGetControl / SetControl copy the whole
