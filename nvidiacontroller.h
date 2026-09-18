@@ -1,6 +1,5 @@
 /*
  * RTX3090Controller - NVIDIA GeForce RTX 3090 Founders Edition LED controller
- * Copyright (C) 2026 Project Contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as published by
